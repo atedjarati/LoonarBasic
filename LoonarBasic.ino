@@ -45,7 +45,7 @@ Copyright 2018 Loonar Technologies, LLC
 /********** OBJECTS **********/
 Adafruit_BMP280           bmp(CS_BMP);                         // BMP280 Pressure/Temperature Sensor
 File                      logfile;                             // SD Card Logfile
-//#define Serial1             Serial1                              // GPS Object
+#define hsGPS             Serial1                              // GPS Object
 TinyGPS                   tinygps;                             // GPS Parser
 RH_RF24                   rf24(GFSK_CS, GFSK_IRQ, GFSK_SDN);   // Si4463 Radio Object
 Adafruit_MCP23008         GPIO_chip;                           // GPIO Expander Chip, i2c
@@ -72,6 +72,9 @@ Adafruit_MCP23008         GPIO_chip;                           // GPIO Expander 
   double    flightDataIridiumTimer;
   uint8_t   flightDataFinalData[BUF_SIZE];
   long      flightDataCounter;
+  double    flightDataTimeOne;
+  double    flightDataTimeTwo;
+  uint8_t   flightDataBufferLength;
 
     
 /***********************************************************************************************************************************************************************/
@@ -129,7 +132,7 @@ void userLoopCode(){
 void messageReceived (uint8_t finaldata[], uint8_t leng){
  
  // YOUR CODE BASED ON RECEIVED DATA HERE
- 
+ Serial.println("Received Message");
  for (uint16_t i = 0; i < leng; i++)
  {
    Serial.print((char)finaldata[i]); 
@@ -152,9 +155,8 @@ void setup()
 {
   delay(1000);
   init_GPIO_chip();                                  // Initialize the GPIO Expansion chip over I2C with the teensy i2c library integrated already into this.
-  Serial.println("Initializing");                    // Print to Serial to show we are initializing the mainboard. 
+  Serial.println("Initializing...");                 // Print to Serial to show we are initializing the mainboard. 
   setPinmodes();                                     // Initialize all the pinModes for every pin (i.e. input, output, etc).
-  RadioOff();                                        // Shut off power to the radio.
   analogReadResolution(ADC_RESOLUTION);              // Set the ADC resolution to appropriate number of bits for maximum resolution
   analogReference(EXTERNAL);                         // Set the ADC reference voltage to the externally supplied 3.3V reference. 
   checkCallsign();                                   // Make sure user entered a correct FCC Callsign. 
@@ -172,12 +174,14 @@ void setup()
   flightDataMinutes = 0.0;                           // Initialize flight data structure minutes double to 0 minutes.
   flightDataIridiumTimer = 1.0;                      // Initialize flight data structure first iridium time to 1 minute. 
   flightDataCounter = 0;                             // Initialize the transmit counter to 0.
+  flightDataTimeTwo = 0.0;                           // Initialize to 0.
+  flightDataTimeOne = millis();                      // Get the current time.
+  flightDataBufferLength = 0;                        // Buffer length is 0 initially. 
   setupSDCard();                                     // Configure the SD card and set up the log file. 
   printLogfileHeaders();                             // Write headers to the log file.
   init_bmp();                                        // Initialize the BMP 280 Pressure/Temperature sensor.
   setGPSFlightMode();                                // Configure the GPS for flight mode to work at high altitudes.
   initRF();                                          // Turn on and initialize the Radio module.
-  //initCameraVideo();                                 // Give power to the camera, then trigger the camera line to start video. 
   userSetupCode();                                   // Call the user setup function code. 
   flightDataStartTime = millis();                    // Initializes the start time of the entire program. 
 }
@@ -197,9 +201,9 @@ void setup()
 --------------------------------------------------------------------------------------------------------------*/
 void loop()
 {
-  //userLoopCode();
+  userLoopCode();
   loonarCode();
-  delay(100);
+  delay(INTERVAL_TIME);
 }
 
 /***********************************************************************************************************************************************************************/
@@ -219,55 +223,30 @@ void loop()
 void loonarCode ()
 {
   smartdelay(GPS_ACQUISITION_TIME);
-  flightDataMinutes = getTime();                         // Acquire the current time since startup of the electronics. 
-  flightDataLatitude = getLatitude();                    // Parse the latitude data from the GPS.
-  flightDataLongitude = getLongitude();                  // Parse the longitude data from the GPS. 
-  flightDataLastAltitude = flightDataAltitude;         // Store the last altitude float variable. 
-  flightDataAltitude = getAltitude();                    // Parse the altitude data from the GPS.
+  flightDataMinutes = getTime();                          // Acquire the current time since startup of the electronics. 
+  flightDataLatitude = getLatitude();                     // Parse the latitude data from the GPS.
+  flightDataLongitude = getLongitude();                   // Parse the longitude data from the GPS. 
+  flightDataLastAltitude = flightDataAltitude;            // Store the last altitude float variable. 
+  flightDataAltitude = getAltitude();                     // Parse the altitude data from the GPS.
   if (flightDataAltitude > flightDataMaxAltitude)
   {
-    flightDataMaxAltitude = flightDataAltitude;        // Get the max altitude achieved. 
+    flightDataMaxAltitude = flightDataAltitude;           // Get the max altitude achieved. 
   }
-  flightDataBMPTemperature = bmp.readTemperature();     // Read the temperature from the BMP280 sensor. 
-  flightDataBMPAltitude = bmp.readPressure();           // Read the altitude from the BMP280 pressure sensor.
-  flightDataTemperature = rf24.get_temperature();                     // Acquire the temperature from the built in sensor from the radio chip.
-  flightDataBatteryVoltage = getBatteryVoltage();       // Measure the voltage of the batteries. 
-  flightDataSupercapVoltage = 0;//getSuperCapVoltage();     // Measure the voltage of the expansion board supercapacitor. 
-  flightDataAscentRate = getAscentRate();
+  flightDataBMPTemperature = bmp.readTemperature();       // Read the temperature from the BMP280 sensor. 
+  flightDataBMPAltitude = bmp.readPressure();             // Read the altitude from the BMP280 pressure sensor.
+  flightDataTemperature = rf24.get_temperature();         // Acquire the temperature from the built in sensor from the radio chip.
+  flightDataBatteryVoltage = getBatteryVoltage();         // Measure the voltage of the batteries. 
+  flightDataSupercapVoltage = 0;                          // Measure the voltage of the expansion board supercapacitor. 
+  flightDataAscentRate = getAscentRate();                 // Measure the average ascent rate of the payload. 
+  takeCameraPicture();                                    // Take a picture with the camera. 
   checkIfLanded();                                        // Check if the balloon has landed.
   getConfiguredData();                                    // Configure the data we want to transmit via Iridium and/or RF.
   logToSDCard();                                          // Log all data to the SD Card.
   printToSerial();                                        // Print everything to the serial monitor. 
-  //transceiveRF();                                         // Transmit and receive telemetry via the radio module. 
-  Serial.println();
-  Serial.print(F("Free RAM: "));
-  Serial.println(FreeRam());
-
-  if (flightDataMinutes > 0.5){
-    Serial1.print("lolk wtf niglet hdsjakdbmabdnbsamdnbsa");
-  
-  }
+  transceiveRF();                                         // Transmit and receive telemetry via the radio module. 
 }
 
-#ifdef __arm__
-    // should use uinstd.h to define sbrk but Due causes a conflict
-    extern "C" char* sbrk(int incr);
-#else  // __ARM__
-    extern char *__brkval;
-    extern char __bss_end;
-#endif  // __arm__
 
-// function from the sdFat library (SdFatUtil.cpp)
-// licensed under GPL v3
-// Full credit goes to William Greiman.
-int FreeRam() {
-    char top;
-    #ifdef __arm__
-        return &top - reinterpret_cast<char*>(sbrk(0));
-    #else  // __arm__
-        return __brkval ? &top - __brkval : &top - &__bss_end;
-    #endif  // __arm__
-}
 /*--------------------------------------------------------------------------------------------------------------
    Function:
      getAscentRate
@@ -280,9 +259,11 @@ int FreeRam() {
 --------------------------------------------------------------------------------------------------------------*/
  float getAscentRate()
 {
-   float ascent_rate_array[25] = {0.0};
-   uint8_t ctr = 0;
-  ascent_rate_array[ctr] = (float)(flightDataAltitude - flightDataLastAltitude)/((float)INTERVAL_TIME/1000000.0);
+  float ascent_rate_array[25] = {0.0};
+  uint8_t ctr = 0;
+  flightDataTimeTwo = millis();
+  ascent_rate_array[ctr] = (float)(flightDataAltitude - flightDataLastAltitude)/((double)((flightDataTimeTwo - flightDataTimeOne)/1000.0));
+  flightDataTimeOne = flightDataTimeTwo;
   ctr++;
   if (ctr >= 25) 
   {
@@ -323,7 +304,7 @@ int FreeRam() {
 
   if (flightDataLanded)
   {
-    INTERVAL_TIME = 100000000; 
+    INTERVAL_TIME = 300000; 
   }
 }
 
@@ -380,29 +361,36 @@ int FreeRam() {
    Purpose: 
      Configures all the current global variable data and puts it in the global data array.   
 --------------------------------------------------------------------------------------------------------------*/
- void getConfiguredData()
+void getConfiguredData()
 {
   char data[BUF_SIZE] = "";
-  sprintf(data, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d", 
-    (int)(flightDataLatitude*10000), 
-    (int)(flightDataLongitude*10000), 
-    (int)(flightDataAltitude), 
-    (int)(flightDataTemperature),
-    (int)(flightDataBatteryVoltage*100), 
-    (int)(flightDataSupercapVoltage*100), 
-    (int)(flightDataCutdown),
-    (int)(flightDataLanded),
-    (int)(flightDataCounter),
-    (int)(flightDataBMPAltitude), 
-    (int)(flightDataBMPTemperature));
+  flightDataBufferLength = sprintf(data, "&&%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d;;", 
+    (int)(flightDataLatitude*10000),         // Latitude multiplied by 10,000
+    (int)(flightDataLongitude*10000),        // Longitude multiplied by 10,000
+    (int)(flightDataAltitude),               // Altitude in meters
+    (int)(flightDataTemperature),            // Temperature in celsius
+    (int)(flightDataBatteryVoltage*100),     // Battery voltage multiplied by 100
+    (int)(flightDataSupercapVoltage*100),    // Supercap voltage multiplied by 100
+    (int)(flightDataCutdown),                // Cutdown boolean
+    (int)(flightDataLanded),                 // Landed boolean
+    (int)(flightDataCounter),                // Counter
+    (int)(flightDataBMPAltitude),            // User configurable data #1: BMP Pressure in pascals
+    (int)(flightDataBMPTemperature));        // User configurable data #2: BMP Temperature in celsius.
+
   
-  Serial.print("Data: ");
-  for (int i = 0; i < BUF_SIZE; i++)
+  //Serial.print("Transmitting Data: ");
+  for (int i = 0; i < flightDataBufferLength; i++)
   {
-    Serial.print(data[i]);
+    //Serial.print(data[i]);
     flightDataFinalData[i] = data[i];    
   } 
-  Serial.println();
+  for (int i = flightDataBufferLength; i < BUF_SIZE; i++)
+  {
+    //Serial.print(";");
+    data[i] = ';';
+    flightDataFinalData[i] = data[i]; 
+  }
+  //Serial.println();
   flightDataCounter++;
 }
 
@@ -425,47 +413,24 @@ int FreeRam() {
   {
     rf24.send(FCCID, arr_len(FCCID));
     rf24.waitPacketSent(); 
+    delay(1000);
   }
 
   // Send the contents of the flight data array
   rf24.send(flightDataFinalData, arr_len(flightDataFinalData));
   rf24.waitPacketSent();
-/*
+
   // Time to parse messages. 
   uint8_t data[BUF_SIZE] = {0};
   uint8_t leng = BUF_SIZE;
 
   // Check to see if there is a received message. 
-  if (rf24.recv(data, &leng))
-  {
-    // Check to see if the incoming message is a cutdown command. 
-    boolean shouldCutdown = true;
-    Serial.println("Incoming Potential Cutdown Message: ");
-    for (size_t i = 0; i < arr_len(CUTDOWN_COMMAND); i++)
-    {
-      Serial.print(data[i]);
-      if(data[i] != CUTDOWN_COMMAND[i]) 
-      {
-        shouldCutdown = false;
-      }
-    }
-    
-    Serial.println();
-
-    // If the cutdown command has been parsed correctly, cutdown the balloon.
-    if (shouldCutdown && (CUTDOWN_CONFIG == 4 || CUTDOWN_CONFIG == 5)) 
-    {
-      cutdownBalloon();
-    }
-
-    
-
-    // If the message is not a loonar message, send it to the user messageReceived function
-    if (!shouldCutdown)
+  for (int i = 0; i < 5; i++) {
+    if (rf24.recv(data, &leng))
     {
       messageReceived(data, leng); 
     }
-  }*/
+  }
 }
 
 
@@ -488,27 +453,29 @@ int FreeRam() {
 
 /*--------------------------------------------------------------------------------------------------------------
    Function:
-     initCameraVideo
+     takeCameraPicture
    Parameters:
      None
    Returns:
      Nothing
    Purpose: 
-     Triggers the camera into video mode. 
+     Triggers the camera to take a picture
 --------------------------------------------------------------------------------------------------------------*/
- void initCameraVideo() 
+ void takeCameraPicture() 
 {
-  delay(5000);
-  CameraOn();
-  CameraDeTrigger();
-  delay(5000);
-  CameraTrigger();
-  delay(1000);
-  CameraDeTrigger();
-  delay(10000);
-  CameraTrigger();
-  delay(1000);
-  CameraDeTrigger();
+  if (((flightDataCounter % CAMERA_INTERVAL) == 0) && (flightDataCounter != 0))
+  {
+    Serial.println("Taking a photo.  Smile!");
+    CameraOn();
+    CameraDeTrigger();
+    delay(7000);
+    CameraTrigger();
+    delay(300);
+    CameraDeTrigger();
+    delay(5000);
+    CameraOff();
+    CameraTrigger();
+  }
 }
 
 
@@ -529,17 +496,10 @@ int FreeRam() {
 --------------------------------------------------------------------------------------------------------------*/
  void initRF() 
 {
-  //SPI.setDataMode(SPI_MODE0);
-  //SPI.setClockDivider(SPI_CLOCK_DIV2);  // Setting clock speed to 8mhz, as 10 is the max for the rfm22
-  //SPI.begin(); 
-  RadioOn();
   boolean ok = rf24.init(BUF_SIZE);
   if (!ok) Serial.println("Radio Err");
   rf24.setFrequency(FREQ); 
   delay(1000);
-  rf24.send(FCCID, arr_len(FCCID));
-  rf24.waitPacketSent();
-
 }
 
 
@@ -603,9 +563,9 @@ void logToSDCard()
 { 
   logfile.print(flightDataMinutes);
   logfile.print(",");
-  logfile.print(flightDataLatitude);
+  logfile.print(flightDataLatitude,4);
   logfile.print(",");
-  logfile.print(flightDataLongitude);
+  logfile.print(flightDataLongitude,4);
   logfile.print(",");
   logfile.print(flightDataAltitude);
   logfile.print(",");
@@ -642,21 +602,21 @@ void logToSDCard()
    Purpose: 
      Prints all relevant flight data to the Serial Monitor. 
 --------------------------------------------------------------------------------------------------------------*/
-void printToSerial() {/*
+void printToSerial() {
   Serial.print("Time: ");
   Serial.print(flightDataMinutes);
   Serial.print(", ");
   Serial.print("Lat: ");
-  Serial.print(flightDataLatitude);
+  Serial.print(flightDataLatitude,4);
   Serial.print(", ");
   Serial.print("Long: ");
-  Serial.print(flightDataLongitude);
+  Serial.print(flightDataLongitude,4);
   Serial.print(", ");
   Serial.print("Alt: ");
   Serial.print(flightDataAltitude);
   Serial.print(", ");
   Serial.print("Ascent Rate: ");
-  Serial.print(flightDataAscentRate);
+  Serial.print(flightDataAscentRate,4);
   Serial.print(", ");
   Serial.print("Max Alt: ");
   Serial.print(flightDataMaxAltitude);
@@ -673,23 +633,14 @@ void printToSerial() {/*
   Serial.print("BatV: ");
   Serial.print(flightDataBatteryVoltage);
   Serial.print(", ");
-  Serial.print("CapV: ");
-  Serial.print(flightDataSupercapVoltage);
-  Serial.print(", ");
-  Serial.print("Cut: ");
-  Serial.print(flightDataCutdown);
-  Serial.print(", ");
   Serial.print("Land: ");
   Serial.print(flightDataLanded);
   Serial.print(", ");
-  Serial.print("Start: ");
-  Serial.print(flightDataStartTime);
-  Serial.print(", ");
-  Serial.print("Iridium: ");
-  Serial.print(flightDataIridiumTimer);
+  Serial.print("Sats: ");
+  Serial.print(tinygps.satellites());
   Serial.print(", ");
   Serial.print("RF Count: ");
-  Serial.println(flightDataCounter);*/
+  Serial.println(flightDataCounter);
 }
 
 
@@ -744,6 +695,7 @@ void setupSDCard()
   } 
   else 
   {
+    Serial.print("Logging to: ");
     Serial.println(filename);
   }
 }
@@ -762,8 +714,6 @@ void setupSDCard()
 void setPinmodes()
 {
   pinMode(GFSK_GATE, OUTPUT);
-  //pinMode(CS_BMP, OUTPUT);
-  //pinMode(SD_CS, OUTPUT);
   pinMode(10,OUTPUT);
   GPIO_chip.pinMode(CAM_GATE,OUTPUT);
   GPIO_chip.pinMode(CAM_CTRL,OUTPUT);
@@ -771,7 +721,7 @@ void setPinmodes()
   GPIO_chip.digitalWrite(CAM_CTRL,LOW);
   pinMode(VCAP_SENSE, INPUT);
   pinMode(VBAT_SENSE, INPUT);
-  Serial1.begin(9600);
+  hsGPS.begin(9600);
 }
 
 
@@ -793,42 +743,6 @@ float getBatteryVoltage()
 
 
 
-
-/*--------------------------------------------------------------------------------------------------------------
-   Function:
-     RadioOn
-   Parameters:
-     None
-   Returns:
-     Nothing
-   Purpose: 
-     Delivers power to the radio module. 
---------------------------------------------------------------------------------------------------------------*/
- void RadioOn()
-{
-  digitalWrite(GFSK_GATE, LOW);
-  delay(1000);
-}
-
-
-/*--------------------------------------------------------------------------------------------------------------
-   Function:
-     RadioOff
-   Parameters:
-     None
-   Returns:
-     Nothing
-   Purpose: 
-     Shuts off power to the radio module.
---------------------------------------------------------------------------------------------------------------*/
- void RadioOff()
-{
-  digitalWrite(GFSK_GATE, HIGH);
-  delay(1000);
-}
-
-
-
 /*--------------------------------------------------------------------------------------------------------------
    Function:
      CameraOn
@@ -841,9 +755,8 @@ float getBatteryVoltage()
 --------------------------------------------------------------------------------------------------------------*/
  void CameraOn()
 {
-  //GPIO_chip.digitalWrite(CAM_CTRL,HIGH);
   GPIO_chip.digitalWrite(CAM_GATE, LOW);
-  delay(1000);
+  //delay(100);
 }
 
 
@@ -860,7 +773,7 @@ float getBatteryVoltage()
  void CameraOff()
 {
   GPIO_chip.digitalWrite(CAM_GATE, HIGH); 
-  delay(1000);
+  delay(100);
 }
 
 
@@ -879,10 +792,10 @@ float getBatteryVoltage()
 {
   for(int i = 0; i < len; i++) 
   {
-    Serial1.write(MSG[i]);
+    hsGPS.write(MSG[i]);
     //Serial.print(MSG[i], HEX);
   }
-  Serial1.println();
+  hsGPS.println();
 }
 
 
@@ -929,7 +842,7 @@ float getBatteryVoltage()
     if (ackByteID > 9) 
     {
       // All packets in order!
-      Serial.println("GPS GOOD!");
+      Serial.println("GPS has been put into flight mode.");
       return true;
     }
  
@@ -941,9 +854,9 @@ float getBatteryVoltage()
     }
  
     // Make sure data is available to read
-    if (Serial1.available()) 
+    if (hsGPS.available()) 
     {
-      b = Serial1.read();
+      b = hsGPS.read();
  
       // Check that bytes arrive in sequence as per expected ACK packet
       if (b == ackPacket[ackByteID]) 
@@ -972,13 +885,14 @@ float getBatteryVoltage()
 --------------------------------------------------------------------------------------------------------------*/
 void setGPSFlightMode()
 {
-   byte gps_set_success = 0;
+  byte gps_set_success = 0;
   while(!gps_set_success) 
   {
     sendUBX(sizeof(MSG)/sizeof(uint8_t));
     gps_set_success = getUBX_ACK();
   }
   gps_set_success = 0;  
+  hsGPS.end();
 }
 
 
@@ -1052,27 +966,17 @@ float getAltitude()
 --------------------------------------------------------------------------------------------------------------*/
 void smartdelay(unsigned long ms) 
 {
+  hsGPS.begin(9600);
   for (unsigned int start = millis(); millis() - start < 1000;)
   {
-    while (Serial1.available())
+    if (hsGPS.available())
     {
-      char c = Serial1.read();
-      Serial.print(c); // uncomment this line if you want to see the GPS data flowing
+      char c = hsGPS.read();
+      //Serial.print(c); // uncomment this line if you want to see the GPS data flowing
       tinygps.encode(c); 
     }
   }
-  /*
-  Serial.println("SmartDelay");
-  unsigned long timing = millis();
-  do 
-  {
-    if (Serial1.available()) 
-    {  
-      char a = Serial1.read();
-      tinygps.encode(a);
-      Serial.print(a);
-    }
-  } while ((millis() - timing) < ms);*/
+  hsGPS.end();
 }
 
 
