@@ -52,7 +52,7 @@ Adafruit_MCP23008         GPIO_chip;                           // GPIO Expander 
 
 /***********************************************************************************************************************************************************************/
 
-/********** GLOBAL DATA STRUCT **********/
+/********** GLOBAL DATA VARIABLES **********/
 
   float     flightDataLatitude;
   float     flightDataLongitude;
@@ -411,13 +411,13 @@ void getConfiguredData()
   // If it is time to send our FCC ID as per law, send it
   if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
   {
-    rf24.send(FCCID, arr_len(FCCID));
+    rf24.send(FCCID, BUF_SIZE);
     rf24.waitPacketSent(); 
     delay(1000);
   }
 
   // Send the contents of the flight data array
-  rf24.send(flightDataFinalData, arr_len(flightDataFinalData));
+  rf24.send(flightDataFinalData, BUF_SIZE);
   rf24.waitPacketSent();
 
   // Time to parse messages. 
@@ -428,7 +428,23 @@ void getConfiguredData()
   for (int i = 0; i < 5; i++) {
     if (rf24.recv(data, &leng))
     {
-      messageReceived(data, leng); 
+      char chardat[BUF_SIZE] = "";
+      
+      for (int i = 0; i < BUF_SIZE; i++)
+      {
+        chardat[i] = data[i];
+      }
+
+      if (chardat[0] == 'L' && chardat[1] == 'a' && chardat[2] == 'n' && chardat[3] == 'd' && chardat[4] == 'e' && chardat[5] == 'd')
+      {
+        Serial.println("Command received to put payload in 'landed' mode.");
+        flightDataLanded = true;
+      }
+      else
+      {
+        messageReceived(data, leng); 
+      }
+      break;
     }
   }
 }
