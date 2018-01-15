@@ -38,11 +38,10 @@ Copyright 2018 Loonar Technologies, LLC
 
 
 /********** PINOUT **********/
-const int BREAKOUT_1 =                 4;    // Breakout pin #1 - Digital input/output only
-const int BREAKOUT_2 =                 A10;  // Breakout pin #2 - Analog input only
-const int BREAKOUT_3 =                 16;   // Breakout pin #3 - Digital input/output or analog input only. 
-const int BREAKOUT_4 =                 A12;  // Breakout pin #4 - Digital input/output or analog input or DAC output only. 
-const int BREAKOUT_6 =                 3;    // Breakout pin #6 - Digital input/output only 
+const int BREAKOUT_1 =                 3;    // Breakout pin #1 - Labeled as 'GPIO1' on the Mainboard. Digital input/output only 
+const int BREAKOUT_2 =                 4;    // Breakout pin #2 - Labeled as 'GPIO2' on the Mainboard. Digital input/output only.
+const int BREAKOUT_3 =                 16;   // Breakout pin #3 - Labeled as 'GPIO3/ADC1' on the Mainboard. Digital input/output or analog input only. 
+const int BREAKOUT_4 =                 A12;  // Breakout pin #4 - Labeled as 'GPIO3/ADC2/DAC' on the Mainboard. Digital input/output or analog input or DAC output only. 
 
 
 

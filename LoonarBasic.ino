@@ -67,6 +67,7 @@ Adafruit_MCP23008         GPIO_chip;                           // GPIO Expander 
   float     flightDataSupercapVoltage;
   boolean   flightDataCutdown;
   boolean   flightDataLanded;
+  boolean   flightDataHAM;
   double    flightDataMinutes;
   double    flightDataStartTime;
   double    flightDataIridiumTimer;
@@ -177,6 +178,7 @@ void setup()
   flightDataTimeTwo = 0.0;                           // Initialize to 0.
   flightDataTimeOne = millis();                      // Get the current time.
   flightDataBufferLength = 0;                        // Buffer length is 0 initially. 
+  flightDataHAM = false;                             // Initialize with assuming the user is not HAM licensed. 
   setupSDCard();                                     // Configure the SD card and set up the log file. 
   printLogfileHeaders();                             // Write headers to the log file.
   init_bmp();                                        // Initialize the BMP 280 Pressure/Temperature sensor.
@@ -326,6 +328,7 @@ void loonarCode ()
 }
 
 
+
 /*--------------------------------------------------------------------------------------------------------------
    Function:
      checkCallsign
@@ -345,7 +348,12 @@ void loonarCode ()
       FCCID[4] == 'E' &&
       FCCID[5] == 'F')
   {
-    Serial.println("Please enter a valid FCC Callsign ID in the user configuration file and reupload the code.");
+    Serial.println("Please enter a valid FCC Callsign ID in the user configuration file and reupload the code should you wish to use the radio feature.");
+    flightDataHAM = false;
+  }
+  else
+  {
+    flightDataHAM = true;
   }
 }
 
@@ -407,44 +415,46 @@ void getConfiguredData()
      messageReceived function whenever incoming data is detected.   
 --------------------------------------------------------------------------------------------------------------*/
  void transceiveRF() 
-{   
-  // If it is time to send our FCC ID as per law, send it
-  if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
-  {
-    rf24.send(FCCID, BUF_SIZE);
-    rf24.waitPacketSent(); 
-    delay(1000);
-  }
-
-  // Send the contents of the flight data array
-  rf24.send(flightDataFinalData, BUF_SIZE);
-  rf24.waitPacketSent();
-
-  // Time to parse messages. 
-  uint8_t data[BUF_SIZE] = {0};
-  uint8_t leng = BUF_SIZE;
-
-  // Check to see if there is a received message. 
-  for (int i = 0; i < 5; i++) {
-    if (rf24.recv(data, &leng))
+{  
+  if (flightDataHAM) { 
+    // If it is time to send our FCC ID as per law, send it
+    if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
     {
-      char chardat[BUF_SIZE] = "";
-      
-      for (int i = 0; i < BUF_SIZE; i++)
+      rf24.send(FCCID, BUF_SIZE);
+      rf24.waitPacketSent(); 
+      delay(1000);
+    }
+  
+    // Send the contents of the flight data array
+    rf24.send(flightDataFinalData, BUF_SIZE);
+    rf24.waitPacketSent();
+  
+    // Time to parse messages. 
+    uint8_t data[BUF_SIZE] = {0};
+    uint8_t leng = BUF_SIZE;
+  
+    // Check to see if there is a received message. 
+    for (int i = 0; i < 5; i++) {
+      if (rf24.recv(data, &leng))
       {
-        chardat[i] = data[i];
+        char chardat[BUF_SIZE] = "";
+        
+        for (int i = 0; i < BUF_SIZE; i++)
+        {
+          chardat[i] = data[i];
+        }
+  
+        if (chardat[0] == 'L' && chardat[1] == 'a' && chardat[2] == 'n' && chardat[3] == 'd' && chardat[4] == 'e' && chardat[5] == 'd')
+        {
+          Serial.println("Command received to put payload in 'landed' mode.");
+          flightDataLanded = true;
+        }
+        else
+        {
+          messageReceived(data, leng); 
+        }
+        break;
       }
-
-      if (chardat[0] == 'L' && chardat[1] == 'a' && chardat[2] == 'n' && chardat[3] == 'd' && chardat[4] == 'e' && chardat[5] == 'd')
-      {
-        Serial.println("Command received to put payload in 'landed' mode.");
-        flightDataLanded = true;
-      }
-      else
-      {
-        messageReceived(data, leng); 
-      }
-      break;
     }
   }
 }
@@ -479,7 +489,7 @@ void getConfiguredData()
 --------------------------------------------------------------------------------------------------------------*/
  void takeCameraPicture() 
 {
-  if (((flightDataCounter % CAMERA_INTERVAL) == 0) && (flightDataCounter != 0))
+  if (((flightDataCounter % CAMERA_INTERVAL) == 0))
   {
     Serial.println("Taking a photo.  Smile!");
     CameraOn();
@@ -691,7 +701,6 @@ void setupSDCard()
   if (!SD.begin(SD_CS)) {
     Serial.println("SD ERR");
     // don't do anything more:
-    return;
   }
   char filename[] = "LOG000.csv";
   for (uint8_t i = 0; i < 1000; i++) 
