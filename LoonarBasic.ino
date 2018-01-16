@@ -160,7 +160,6 @@ void setup()
   setPinmodes();                                     // Initialize all the pinModes for every pin (i.e. input, output, etc).
   analogReadResolution(ADC_RESOLUTION);              // Set the ADC resolution to appropriate number of bits for maximum resolution
   analogReference(EXTERNAL);                         // Set the ADC reference voltage to the externally supplied 3.3V reference. 
-  checkCallsign();                                   // Make sure user entered a correct FCC Callsign. 
   flightDataLatitude = LAUNCH_LATITUDE;              // Initialize flight data structure latitude float to the launch site latitude. 
   flightDataLongitude = LAUNCH_LONGITUDE;            // Initialize flight data structure longitude float to the launch site longitude. 
   flightDataLastAltitude = 0.0;                      // Initialize flight data structure last altitude float to 0 meters.
@@ -179,6 +178,7 @@ void setup()
   flightDataTimeOne = millis();                      // Get the current time.
   flightDataBufferLength = 0;                        // Buffer length is 0 initially. 
   flightDataHAM = false;                             // Initialize with assuming the user is not HAM licensed. 
+  checkCallsign();                                   // Make sure user entered a correct FCC Callsign. 
   setupSDCard();                                     // Configure the SD card and set up the log file. 
   printLogfileHeaders();                             // Write headers to the log file.
   init_bmp();                                        // Initialize the BMP 280 Pressure/Temperature sensor.
@@ -261,10 +261,10 @@ void loonarCode ()
 --------------------------------------------------------------------------------------------------------------*/
  float getAscentRate()
 {
-  float ascent_rate_array[25] = {0.0};
-  uint8_t ctr = 0;
+  static float ascent_rate_array[25] = {0.0};
+  static uint8_t ctr = 0;
   flightDataTimeTwo = millis();
-  ascent_rate_array[ctr] = (float)(flightDataAltitude - flightDataLastAltitude)/((double)((flightDataTimeTwo - flightDataTimeOne)/1000.0));
+  ascent_rate_array[ctr] = (float)((flightDataAltitude - flightDataLastAltitude)/((double)((flightDataTimeTwo - flightDataTimeOne)/1000.0)));
   flightDataTimeOne = flightDataTimeTwo;
   ctr++;
   if (ctr >= 25) 
@@ -371,33 +371,31 @@ void loonarCode ()
 --------------------------------------------------------------------------------------------------------------*/
 void getConfiguredData()
 {
-  char data[BUF_SIZE] = "";
-  flightDataBufferLength = sprintf(data, "&&%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d;;", 
+  char data[BUF_SIZE] = {0};
+  
+  flightDataBufferLength = sprintf(data, "%06d,%06d,%05d,%04d,%03d,%03d,%03d,%d,%d,%06d,%06d,%03d",
     (int)(flightDataLatitude*10000),         // Latitude multiplied by 10,000
     (int)(flightDataLongitude*10000),        // Longitude multiplied by 10,000
     (int)(flightDataAltitude),               // Altitude in meters
+    (int)(flightDataAscentRate*100),         // Ascent rate in m/s
     (int)(flightDataTemperature),            // Temperature in celsius
     (int)(flightDataBatteryVoltage*100),     // Battery voltage multiplied by 100
     (int)(flightDataSupercapVoltage*100),    // Supercap voltage multiplied by 100
     (int)(flightDataCutdown),                // Cutdown boolean
     (int)(flightDataLanded),                 // Landed boolean
     (int)(flightDataCounter),                // Counter
+    
+    // User Configurable Data Below:
     (int)(flightDataBMPAltitude),            // User configurable data #1: BMP Pressure in pascals
     (int)(flightDataBMPTemperature));        // User configurable data #2: BMP Temperature in celsius.
 
   
   //Serial.print("Transmitting Data: ");
-  for (int i = 0; i < flightDataBufferLength; i++)
+  for (int i = 0; i < BUF_SIZE; i++)
   {
     //Serial.print(data[i]);
     flightDataFinalData[i] = data[i];    
   } 
-  for (int i = flightDataBufferLength; i < BUF_SIZE; i++)
-  {
-    //Serial.print(";");
-    data[i] = ';';
-    flightDataFinalData[i] = data[i]; 
-  }
   //Serial.println();
   flightDataCounter++;
 }
