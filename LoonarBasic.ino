@@ -183,7 +183,7 @@ void setup()
   printLogfileHeaders();                             // Write headers to the log file.
   init_bmp();                                        // Initialize the BMP 280 Pressure/Temperature sensor.
   setGPSFlightMode();                                // Configure the GPS for flight mode to work at high altitudes.
-  initRF();                                          // Turn on and initialize the Radio module.
+  initRF();                                          // Turn on and initialize the Radio module.  
   userSetupCode();                                   // Call the user setup function code. 
   flightDataStartTime = millis();                    // Initializes the start time of the entire program. 
 }
@@ -416,17 +416,21 @@ void getConfiguredData()
 {  
   if (flightDataHAM) { 
     // If it is time to send our FCC ID as per law, send it
-    if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
+    /*if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
     {
       rf24.send(FCCID, BUF_SIZE);
       rf24.waitPacketSent(); 
       delay(1000);
-    }
+    }*/
   
     // Send the contents of the flight data array
-    rf24.send(flightDataFinalData, BUF_SIZE);
+    //rf24.send(flightDataFinalData, BUF_SIZE);
+    uint8_t doot[BUF_SIZE] = "Hello my name is Aria Tedjarati and I am testing the Loonar Radio!";
+    rf24.send(doot, BUF_SIZE);
     rf24.waitPacketSent();
   
+
+  /*
     // Time to parse messages. 
     uint8_t data[BUF_SIZE] = {0};
     uint8_t leng = BUF_SIZE;
@@ -436,7 +440,7 @@ void getConfiguredData()
       if (rf24.recv(data, &leng))
       {
         char chardat[BUF_SIZE] = "";
-        
+        Serial.print("Length:");Serial.println(leng);
         for (int i = 0; i < BUF_SIZE; i++)
         {
           chardat[i] = data[i];
@@ -453,7 +457,7 @@ void getConfiguredData()
         }
         break;
       }
-    }
+    }*/
   }
 }
 
