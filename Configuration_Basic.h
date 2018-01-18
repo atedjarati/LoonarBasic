@@ -46,8 +46,8 @@ const int BREAKOUT_4 =                 A12;  // Breakout pin #4 - Labeled as 'GP
 
 
 /********** USER DEFINED CONSTANTS **********/
+const uint8_t  FCCID[6] =              {'A','B','C','D','E','F'};    // FCC Radio License Callsign.
 const double   FREQ =                  145.0;                        // Center frequency in MHz for the radio module.
-const uint8_t  FCCID[6] =              {'K','K','6','M','I','S'};    // FCC Radio License Callsign.
 const float    LAUNCH_LATITUDE =       0.0000;                       // Launch Location Latitude
 const float    LAUNCH_LONGITUDE =      0.0000;                       // Launch Location Longitude
 

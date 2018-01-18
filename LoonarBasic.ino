@@ -65,6 +65,7 @@ Adafruit_MCP23008         GPIO_chip;                           // GPIO Expander 
   float     flightDataTemperature;
   float     flightDataBatteryVoltage;
   float     flightDataSupercapVoltage;
+  float     flightDataSeconds;
   boolean   flightDataCutdown;
   boolean   flightDataLanded;
   boolean   flightDataHAM;
@@ -172,6 +173,7 @@ void setup()
   flightDataCutdown = false;                         // Initialize flight data structure cutdown boolean to false.
   flightDataLanded = false;                          // Initialize flight data structure landed boolean to false.
   flightDataMinutes = 0.0;                           // Initialize flight data structure minutes double to 0 minutes.
+  flightDataSeconds = 0.0;                           // Initialize flight data structure seconds float to 0 seconds. 
   flightDataIridiumTimer = 1.0;                      // Initialize flight data structure first iridium time to 1 minute. 
   flightDataCounter = 0;                             // Initialize the transmit counter to 0.
   flightDataTimeTwo = 0.0;                           // Initialize to 0.
@@ -226,6 +228,7 @@ void loonarCode ()
 {
   smartdelay(GPS_ACQUISITION_TIME);
   flightDataMinutes = getTime();                          // Acquire the current time since startup of the electronics. 
+  flightDataSeconds = flightDataMinutes*60.0;             // Get current seconds. 
   flightDataLatitude = getLatitude();                     // Parse the latitude data from the GPS.
   flightDataLongitude = getLongitude();                   // Parse the longitude data from the GPS. 
   flightDataLastAltitude = flightDataAltitude;            // Store the last altitude float variable. 
@@ -373,11 +376,12 @@ void getConfiguredData()
 {
   char data[BUF_SIZE] = {0};
   
-  flightDataBufferLength = sprintf(data, "%06d,%06d,%05d,%04d,%03d,%03d,%03d,%d,%d,%06d,%06d,%03d",
+  flightDataBufferLength = sprintf(data, "%06d %08d,%08d,%05d,%04d,%03d,%03d,%03d,%d,%d,%06d,%06d,%03d",
+    (int)(flightDataSeconds),                // Transmission time in seconds
     (int)(flightDataLatitude*10000),         // Latitude multiplied by 10,000
     (int)(flightDataLongitude*10000),        // Longitude multiplied by 10,000
     (int)(flightDataAltitude),               // Altitude in meters
-    (int)(flightDataAscentRate*100),         // Ascent rate in m/s
+    (int)(flightDataAscentRate*100),         // Ascent rate in m/s multipled by 100
     (int)(flightDataTemperature),            // Temperature in celsius
     (int)(flightDataBatteryVoltage*100),     // Battery voltage multiplied by 100
     (int)(flightDataSupercapVoltage*100),    // Supercap voltage multiplied by 100
@@ -401,6 +405,43 @@ void getConfiguredData()
 }
 
 
+/*
+float          mins[150];
+float          maxs[150];
+float*         vars[150];
+int            bits[150];
+int            argc =   0;
+
+
+void log_variable(float* variable, float min, float max, int bit) 
+{
+  mins[argc] = min;
+  maxs[argc] = max;//+(max-min)*pow(2,-bit);
+  bits[argc] = bit;
+  vars[argc] = variable;
+  argc += 1;
+}
+
+
+void initialize_compression()
+{
+  log_variable (&flightDataSeconds,         0,          500000,           19);        // transmit_time
+  log_variable (&flightDataLatitude,        -90,        90,               21);        // latitude
+  log_variable (&flightDataLongitude,       -180,       180,              22);        // longitude
+  log_variable (&flightDataAltitude,        -2000,      40000,            16);        // altitude_gps
+  log_variable (&flightDataAscentRate,      -10,        10,               11);        // ascent_rate
+  log_variable (&flightDataTemperature,     -60,        100,              10);        // temperature
+  log_variable (&flightDataBatteryVoltage,  0,          5.5,              9);         // battery_voltage
+  log_variable (&flightDataSupercapVoltage, 0,          6,                9);         // supercap_voltage
+  log_variable (&flightDataCutdown,         0,          1,                1);         // cutdown
+  log_variable (&flightDataLanded,          0,          1,                1);         // landed
+  log_variable (&flightDataCounter,         0,          500000,           19);        // counter
+  log_variable (&flightDataBMPAltitude,     -2000,      40000,            16);        // altitude_bmp
+  log_variable (&flightDataBMPTemperature,  -60,        100,              10);        // temperature_bmp            
+}*/
+
+
+
 /*--------------------------------------------------------------------------------------------------------------
    Function:
      transceiveRF
@@ -416,21 +457,21 @@ void getConfiguredData()
 {  
   if (flightDataHAM) { 
     // If it is time to send our FCC ID as per law, send it
-    /*if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
+    if ((flightDataCounter % FCC_ID_INTERVAL) == 0)
     {
       rf24.send(FCCID, BUF_SIZE);
       rf24.waitPacketSent(); 
       delay(1000);
-    }*/
-  
-    // Send the contents of the flight data array
-    //rf24.send(flightDataFinalData, BUF_SIZE);
-    uint8_t doot[BUF_SIZE] = "Hello my name is Aria Tedjarati and I am testing the Loonar Radio!";
-    rf24.send(doot, BUF_SIZE);
-    rf24.waitPacketSent();
-  
+    }
 
-  /*
+    // Send the contents of the flight data array
+    rf24.send(flightDataFinalData, BUF_SIZE);
+    //uint8_t doot[BUF_SIZE] = "Hello my name is Aria Tedjarati and I am testing the Loonar Radio!";
+    //rf24.send(doot, BUF_SIZE);
+    rf24.waitPacketSent();
+    
+
+  
     // Time to parse messages. 
     uint8_t data[BUF_SIZE] = {0};
     uint8_t leng = BUF_SIZE;
@@ -446,7 +487,12 @@ void getConfiguredData()
           chardat[i] = data[i];
         }
   
-        if (chardat[0] == 'L' && chardat[1] == 'a' && chardat[2] == 'n' && chardat[3] == 'd' && chardat[4] == 'e' && chardat[5] == 'd')
+        if (chardat[0] == LANDED_COMMAND[0] && 
+            chardat[1] == LANDED_COMMAND[1] && 
+            chardat[2] == LANDED_COMMAND[2] && 
+            chardat[3] == LANDED_COMMAND[3] && 
+            chardat[4] == LANDED_COMMAND[4] && 
+            chardat[5] == LANDED_COMMAND[5])
         {
           Serial.println("Command received to put payload in 'landed' mode.");
           flightDataLanded = true;
@@ -457,7 +503,8 @@ void getConfiguredData()
         }
         break;
       }
-    }*/
+      delay(200);
+    }
   }
 }
 

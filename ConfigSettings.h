@@ -63,6 +63,7 @@ const uint8_t  FCC_ID_INTERVAL =                                 10;            
 const uint8_t  CAMERA_INTERVAL =                                 25;                           // Every 'x' number of loops, we take a picture. 
 const uint8_t  BUF_SIZE =                                        100;                          // Data array size for telemetry in bytes. 
 const int      GPS_ACQUISITION_TIME =                            200;                          // GPS Parser acquisition time per loop in milliseconds. 
+const char     LANDED_COMMAND[] =                                {"Landed"};                   // Landed Command to be sent over radio communications for low power mode.
 const uint8_t  MSG[] = {                                                                       // Command to send to GPS for high altitude mode upon startup.
     0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 
     0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
