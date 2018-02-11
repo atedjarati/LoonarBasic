@@ -543,7 +543,7 @@ void initialize_compression()
     Serial.println("Taking a photo.  Smile!");
     CameraOn();
     CameraDeTrigger();
-    delay(7000);
+    delay(20000);
     CameraTrigger();
     delay(300);
     CameraDeTrigger();
